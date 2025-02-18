@@ -1,25 +1,33 @@
 import streamlit as st
 import pandas as pd
-import requests
 import io
 import matplotlib.pyplot as plt
 
-# Function to load data from uploaded file or URL
-def load_data(uploaded_file, file_url):
-    if uploaded_file:
-        df = pd.read_excel(uploaded_file)
-    elif file_url:
-        response = requests.get(file_url)
-        df = pd.read_excel(io.BytesIO(response.content))
-    else:
-        return None
-    return df
+# Generate Fake ATM & CBS Data
+def generate_fake_data():
+    # Fake ATM Transactions
+    atm_data = pd.DataFrame([
+        {"REFERENCE": "1001", "DEBIT": 100000, "CREDIT": 0, "CURRENCY": "TZS"},
+        {"REFERENCE": "1002", "DEBIT": 50000, "CREDIT": 0, "CURRENCY": "TZS"},
+        {"REFERENCE": "1003", "DEBIT": 200000, "CREDIT": 0, "CURRENCY": "TZS"},
+        {"REFERENCE": "1004", "DEBIT": 75000, "CREDIT": 0, "CURRENCY": "TZS"},
+    ])
+
+    # Fake CBS Transactions (With Intentional Errors)
+    cbs_data = pd.DataFrame([
+        {"REFERENCE": "1001", "DEBIT": 100000, "CREDIT": 0, "CURRENCY": "TZS"},
+        {"REFERENCE": "1002", "DEBIT": 45000, "CREDIT": 0, "CURRENCY": "TZS"},  # Mismatch
+        {"REFERENCE": "1004", "DEBIT": 75000, "CREDIT": 0, "CURRENCY": "TZS"},
+        {"REFERENCE": "1005", "DEBIT": 30000, "CREDIT": 0, "CURRENCY": "TZS"},  # Extra Transaction in CBS
+    ])
+
+    return atm_data, cbs_data
 
 # Function to perform reconciliation
 def reconcile_data(atm_data, cbs_data):
     discrepancies = []
 
-    # Merging on REFERENCE
+    # Merge Data
     merged_data = pd.merge(atm_data, cbs_data, on="REFERENCE", how="outer", suffixes=("_ATM", "_CBS"), indicator=True)
 
     for _, row in merged_data.iterrows():
@@ -27,12 +35,12 @@ def reconcile_data(atm_data, cbs_data):
             discrepancies.append({"REFERENCE": row["REFERENCE"], "Issue": "Missing in CBS"})
         elif row["_merge"] == "right_only":
             discrepancies.append({"REFERENCE": row["REFERENCE"], "Issue": "Missing in ATM"})
-        elif row["DEBIT_ATM"] != row["DEBIT_CBS"] or row["CREDIT_ATM"] != row["CREDIT_CBS"]:
+        elif row["DEBIT_ATM"] != row["DEBIT_CBS"]:
             discrepancies.append({"REFERENCE": row["REFERENCE"], "Issue": "Amount Mismatch"})
 
     return pd.DataFrame(discrepancies)
 
-# Function to generate an Excel file
+# Function to generate Excel file for download
 def generate_excel_report(discrepancy_df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -40,48 +48,39 @@ def generate_excel_report(discrepancy_df):
     return output.getvalue()
 
 # Streamlit UI
-st.title("🏦 ATM vs CBS Reconciliation Demo")
+st.title("🏦 ATM vs CBS Reconciliation Demo (Fixed Data)")
 
-# File Upload Section
-st.sidebar.header("📂 Upload or Provide URL")
-atm_file = st.sidebar.file_uploader("Upload ATM Log (Excel)", type=["xlsx"])
-cbs_file = st.sidebar.file_uploader("Upload CBS Report (Excel)", type=["xlsx"])
-atm_url = st.sidebar.text_input("OR Enter ATM Log URL")
-cbs_url = st.sidebar.text_input("OR Enter CBS Report URL")
+# Load Fake Data
+atm_data, cbs_data = generate_fake_data()
 
-if st.sidebar.button("Process Data"):
-    # Load Data
-    atm_data = load_data(atm_file, atm_url)
-    cbs_data = load_data(cbs_file, cbs_url)
+# Show Sample Data
+st.subheader("📋 Sample ATM & CBS Data")
+col1, col2 = st.columns(2)
+with col1:
+    st.write("🟢 **ATM Transactions**")
+    st.dataframe(atm_data)
+with col2:
+    st.write("🔵 **CBS Transactions**")
+    st.dataframe(cbs_data)
 
-    if atm_data is not None and cbs_data is not None:
-        st.success("✅ Files Loaded Successfully!")
+# Perform Reconciliation
+discrepancy_df = reconcile_data(atm_data, cbs_data)
 
-        # Select relevant columns
-        atm_data = atm_data[["REFERENCE", "DEBIT", "CREDIT", "CURRENCY"]]
-        cbs_data = cbs_data[["REFERENCE", "DEBIT", "CREDIT", "CURRENCY"]]
+if not discrepancy_df.empty:
+    st.subheader("⚠️ Detected Discrepancies")
+    st.write(discrepancy_df)
 
-        # Perform reconciliation
-        discrepancy_df = reconcile_data(atm_data, cbs_data)
+    # Generate Excel Report
+    excel_data = generate_excel_report(discrepancy_df)
+    st.download_button(label="📥 Download Reconciliation Report", data=excel_data, file_name="Reconciliation_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-        if not discrepancy_df.empty:
-            st.subheader("⚠️ Detected Discrepancies")
-            st.write(discrepancy_df)
-
-            # Generate Excel file
-            excel_data = generate_excel_report(discrepancy_df)
-            st.download_button(label="📥 Download Reconciliation Report", data=excel_data, file_name="Reconciliation_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-            # Visualization
-            st.subheader("📊 Discrepancy Summary")
-            fig, ax = plt.subplots()
-            discrepancy_df["Issue"].value_counts().plot(kind="bar", ax=ax, color=["red", "orange", "blue"])
-            st.pyplot(fig)
-        else:
-            st.success("✅ No Discrepancies Found!")
-
-    else:
-        st.error("⚠️ Please upload files or provide URLs.")
+    # Visualization
+    st.subheader("📊 Discrepancy Summary")
+    fig, ax = plt.subplots()
+    discrepancy_df["Issue"].value_counts().plot(kind="bar", ax=ax, color=["red", "orange", "blue"])
+    st.pyplot(fig)
+else:
+    st.success("✅ No Discrepancies Found!")
 
 # Footer
 st.sidebar.markdown("---")
