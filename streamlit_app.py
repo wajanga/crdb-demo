@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 
 # Initialize session state for dynamic data
 if "atm_data" not in st.session_state:
-    st.session_state.atm_data = pd.DataFrame(columns=["REFERENCE", "DEBIT", "CREDIT", "CURRENCY"])
+    st.session_state.atm_data = None
 if "cbs_data" not in st.session_state:
-    st.session_state.cbs_data = pd.DataFrame(columns=["REFERENCE", "DEBIT", "CREDIT", "CURRENCY"])
+    st.session_state.cbs_data = None
 
-# Function to generate default data
+# Function to generate default fake data
 def generate_fake_data():
     atm_data = pd.DataFrame([
         {"REFERENCE": "1001", "DEBIT": 100000, "CREDIT": 0, "CURRENCY": "TZS"},
@@ -27,12 +27,11 @@ def generate_fake_data():
     
     return atm_data, cbs_data
 
-# Load Fake Data Initially
-if st.sidebar.button("Load Fake Data"):
+# Load Fake Data Initially (Ensures data appears on first load)
+if st.session_state.atm_data is None or st.session_state.cbs_data is None:
     atm_data, cbs_data = generate_fake_data()
     st.session_state.atm_data = atm_data
     st.session_state.cbs_data = cbs_data
-    st.success("Fake Data Loaded!")
 
 # Function to reconcile data
 def reconcile_data(atm_data, cbs_data):
